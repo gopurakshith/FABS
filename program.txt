@@ -1,0 +1,181 @@
+!pip install scikit-fuzzy
+
+import numpy as np
+import skfuzzy as fuzz
+from skfuzzy import control as ctrl
+import matplotlib.pyplot as plt
+import random
+
+def AutomaticBreak():
+    # Input initial variables: distance and velocity
+    init_od = float(input("Current obstacle_distance is(m):"))
+    init_v = float(input("Current velocity is(m/s):"))
+    init_w=  float(input("weight of car  is(kg):"))
+    #init_ts=float(input("tire width of car is (mm):"))
+    init_b = 0
+
+    #init_s=32
+    #init_v=6.8
+    #init_w=720
+    #init_ts=170
+
+    # Initial condition classifying
+    
+    #if init_s > 50 and 0 < init_v <= 30 :
+        #print("Normal driving.")
+    #elif 0 < init_s <= 50 and 0 < init_v <= 30 and (init_p>702):
+    if init_v > 30:
+        print("Driving over the speed limit!")
+    if init_w<720 :
+        print("Error input, please try again.")
+    else:
+        print("Automatic Brake System is launching.")
+        breakforce(init_od, init_v,init_w)
+        
+    
+    
+        
+    
+    
+
+def randomTest(iterations):
+    # Randomly produce initial variables: distance and velocity
+    for test in range(iterations):
+        init_od = float(random.randint(20,50))
+        init_v = float(random.randint(1,30))
+        init_w = float(random.randint(720,2600))
+        
+        init_b = 0
+
+        breakforce(init_od, init_v,init_w)
+    
+def breakforce(obstacle_distance, speed,weight):
+    # Entire processing simulation
+    t = 1/8
+    count = 0
+    crash = 0
+    list_d = [obstacle_distance]
+    list_v = [speed]
+    list_w = [weight]
+    list_b = []
+    while speed > 0:
+        speed_0 = speed
+        brake = FuzzyLogicctrl(obstacle_distance, speed, weight)
+        speed = speed_0 - brake * t
+        if speed < 0.0:
+            speed = 0.0
+        brake, speed ,weight= round(brake,2), round(speed,2),round(weight,2)
+        obstacle_distance = obstacle_distance - ((speed_0 + speed) / 2)* t 
+        obstacle_distance = round(obstacle_distance,2)
+        list_d.append(obstacle_distance)
+        list_v.append(speed)
+        list_w.append(weight)
+        list_b.append(brake)
+        if obstacle_distance <= 0:
+            crash = 1
+            print('Crash!')
+            break
+        print('speed is: {0:.2f}m/s, obstacle distance is: {1:.2f}m, weight is :{2:.2f}kg, brake force is: {3:.2f}kN'
+              .format(speed, obstacle_distance,weight,brake))
+        count += 1
+    T = t * count
+    print('Total time is {0:.1f}s'.format(T))
+
+    # Save data into samples.txt file
+    file = open('recordedinfo.txt','a')
+    file.write(' '.join(str(d) for d in list_d) + '\t')
+    file.write(' '.join(str(v) for v in list_v) + '\t')
+    file.write(' '.join(str(w) for w in list_w) + '\t')
+    file.write(str(T) + '\t')
+    file.write(str(crash) + '\n')
+    file.close()
+    
+
+def FuzzyLogicctrl(current_obstacle_distance, current_speed,current_weight):
+    # Define input and output variables
+    obstacle_distance = ctrl.Antecedent(np.arange(0, 50, 1), 'obstacle_distance')
+    velocity = ctrl.Antecedent(np.arange(0, 30, 1), 'velocity')
+    weight   =ctrl.Antecedent(np.arange(0,2500 , 1), 'weight')
+    brake = ctrl.Consequent(np.arange(0, 45, 1), 'brake')
+
+    # Distance membership function
+    obstacle_distance['near'] = fuzz.trimf(obstacle_distance.universe, [0, 0, 25])
+    obstacle_distance['medium'] = fuzz.trimf(obstacle_distance.universe, [0, 25, 50])
+    obstacle_distance['far'] = fuzz.trimf(obstacle_distance.universe, [25, 50, 50])
+
+    # Velocity membership function
+    velocity['low'] = fuzz.trimf(velocity.universe, [0, 0, 15])
+    velocity['medium'] = fuzz.trimf(velocity.universe, [0, 15, 30])
+    velocity['high'] = fuzz.trimf(velocity.universe, [15, 30, 30])
+
+     # weight membership function
+    weight['low'] = fuzz.trimf(weight.universe, [0, 0, 720])
+    weight['medium'] = fuzz.trimf(weight.universe, [0, 720,2500])
+    weight['high'] = fuzz.trimf(weight.universe, [720, 2500, 2500])
+
+   
+
+
+    # Brake force membership function
+    brake['low'] = fuzz.trimf(brake.universe, [0, 0, 15])
+    brake['medium'] = fuzz.trimf(brake.universe, [0, 15, 30])
+    brake['high'] = fuzz.trimf(brake.universe, [15, 30, 45])
+    brake['full'] = fuzz.trimf(brake.universe,[30, 45, 45])
+
+    # Inference Engine
+    rule1 = ctrl.Rule(antecedent=(obstacle_distance['far'] & weight['high'] &velocity['medium']) |
+                                 (obstacle_distance['far'] & weight['medium'] &velocity['high'])|
+                                 (obstacle_distance['far'] & weight['high'] &velocity['low'])|
+                                 (obstacle_distance['far'] & weight['medium'] &velocity['low'])|
+                                 (obstacle_distance['far'] & weight['high'] &velocity['high']),
+                             consequent=brake['low'])
+    
+    rule2 = ctrl.Rule(antecedent=(obstacle_distance['medium'] & weight['medium'] &velocity['low']) |
+                                 (obstacle_distance['medium'] & weight['medium'] &velocity['medium'])|
+                                 (obstacle_distance['medium'] & weight['medium'] &velocity['high']),
+                             consequent=brake['medium'])
+    rule3 = ctrl.Rule(antecedent=(obstacle_distance['near'] & weight['high']&velocity['high'])|
+                                 (obstacle_distance['near'] & weight['low'] &velocity['medium'])|
+                                 (obstacle_distance['near'] & weight['low'] &velocity['high'])|
+                                 (obstacle_distance['near'] & weight['high'] &velocity['medium']),
+                             consequent=brake['high'])
+    rule4 = ctrl.Rule(antecedent=(obstacle_distance['near'] & weight['low'] &velocity['high']),
+                             consequent=brake['full'])
+    
+   
+
+    # Controller simulation
+    AutomaticBreak_ctrl = ctrl.ControlSystem([rule1, rule2, rule3, rule4])
+    AutomaticBreak = ctrl.ControlSystemSimulation(AutomaticBreak_ctrl)
+
+    # Automatic brake processing
+    AutomaticBreak.input['obstacle_distance'] = current_obstacle_distance
+    AutomaticBreak.input['velocity'] = current_speed
+    AutomaticBreak.input['weight'] = current_weight
+    
+
+    
+    AutomaticBreak.compute()
+    
+    brake.view(sim = AutomaticBreak)
+    #weight.view(sim = ABS)
+    #tyresize.view(sim = ABS)
+    #distance.view(sim = ABS)
+    #velocity.view(sim = ABS)
+    return AutomaticBreak.output['brake']
+
+if __name__ == "__main__":
+    mode = input("Please select mode:\n\
+                  0: Manual Input\n\
+                  1: Random input\n")
+    if mode == '0':
+        AutomaticBreak()
+        
+
+    
+    elif mode == '1':
+        tests = int(input("Please input your test iterations:"))
+        randomTest(tests)
+    else:
+        print("Wrong mode type! Please try again!")
+
